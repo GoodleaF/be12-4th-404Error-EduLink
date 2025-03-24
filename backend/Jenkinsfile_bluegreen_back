@@ -54,22 +54,30 @@ pipeline {
                     def deployColor = (env.BUILD_NUMBER.toInteger() % 2 == 0) ? 'green' : 'blue'
                     echo "Deploying ${deployColor} version"
 
-
+                    // 로컬 YAML 파일 내 'latest'를 IMAGE_TAG로 치환
                     sh """
                         sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${deployColor}.yml
                     """
 
-                    // SSH를 통해 원격 Kubernetes 마스터에서 ConfigMap, Service, 그리고 선택한 Deployment를 적용
+                    // 디버그: 해당 디렉터리의 파일 목록 출력 (확인용)
+                    sh "ls -la ${WORKSPACE}/backend/k8s"
+
+                    // 수정한 YAML 파일을 원격 호스트로 전송 (scp 명령어 추가)
+                    sh """
+                        scp ${WORKSPACE}/backend/k8s/backend-deployment-${deployColor}.yml ${KUBE_HOST}:/home/test/backend/k8s/
+                    """
+
+                    // 원격 호스트에서 ConfigMap, Service, 그리고 Deployment 적용
                     sh """
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-cm.yml'
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${deployColor}.yml'
                     """
 
-                    // 선택한 Deployment의 롤아웃 상태를 대기
+                    // 롤아웃 상태 대기
                     sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${deployColor} -n goodleaf'"
 
-                    // 반대 버전은 스케일 다운 처리
+                    // 반대 버전 Deployment 스케일 다운 처리
                     def otherColor = (deployColor == 'green') ? 'blue' : 'green'
                     sh "ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${otherColor} --replicas=0 -n goodleaf'"
                 }
