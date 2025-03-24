@@ -17,19 +17,19 @@ pipeline {
         stage('Gradle Build') {
             steps {
                 echo "Add Permission"
-                sh 'chmod +x /var/lib/jenkins/workspace/edulink-backend/backend/gradlew'
+                sh 'chmod +x /var/lib/jenkins/workspace/be12-4th-404Error-EduLink-test/backend/gradlew'
 
                 echo "Delete build"
-                sh 'rm -rf /var/lib/jenkins/workspace/edulink-backend/backend/build'
+                sh 'rm -rf /var/lib/jenkins/workspace/be12-4th-404Error-EduLink-test/backend/build'
 
                 echo "Move to backend and Build"
-                sh 'cd /var/lib/jenkins/workspace/edulink-backend/backend && ./gradlew bootJar'
+                sh 'cd /var/lib/jenkins/workspace/be12-4th-404Error-EduLink-test/backend && ./gradlew bootJar'
             }
         }
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}", "/var/lib/jenkins/workspace/edulink-backend/backend")
+                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}", "/var/lib/jenkins/workspace/be12-4th-404Error-EduLink-test/backend")
                 }
             }
         }
