@@ -5,7 +5,6 @@ pipeline {
         IMAGE_NAME = 'mstar228/edulink-frontend'
         IMAGE_TAG = "1.0.${BUILD_NUMBER}"
         KUBE_HOST = 'test@192.0.2.7'
-        NAMESPACE = 'kms'
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
@@ -50,7 +49,7 @@ pipeline {
                 script {
                     // 원격 클러스터에서 프론트엔드 서비스의 selector 'deployment' 값을 조회합니다.
                     def currentColor = sh(
-                        script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -n ${NAMESPACE} -o jsonpath=\"{.spec.selector.deployment}\"'",
+                        script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"'",
                         returnStdout: true
                     ).trim()
                     echo "Current deployment color: ${currentColor}"
@@ -69,30 +68,30 @@ pipeline {
 //             }//
             steps {
                 script {
-                    // 로컬의 배포 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
+                    // 로컬의 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
                     sh """
                         sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml
                     """
                     // 디버깅: 로컬 k8s 디렉터리의 파일 목록 출력
                     sh "ls -la ${WORKSPACE}/frontend/k8s"
 
-                    // 수정한 YAML 파일을 원격 호스트로 전송 (scp 명령어 사용)
+                    // 수정한 YAML 파일을 원격 호스트로 전송
                     sh """
                         scp ${WORKSPACE}/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml ${KUBE_HOST}:/home/test/frontend/k8s/
                     """
 
-                    // 원격 호스트에서 ConfigMap, Service, 그리고 선택된 Deployment를 적용
+                    // 원격 호스트에서 ConfigMap, Service, 그리고 선택된 Deployment 적용
                     sh """
-                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-conf.yml -n ${NAMESPACE}'
-                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-svc.yml -n ${NAMESPACE}'
-                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml -n ${NAMESPACE}'
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-conf.yml'
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-svc.yml'
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml'
                     """
 
                     // 선택된 Deployment의 롤아웃 상태 대기
-                    sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/frontend-deployment-${env.DEPLOY_COLOR} -n ${NAMESPACE}'"
+                    sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/frontend-deployment-${env.DEPLOY_COLOR}'"
 
-                    // 반대 색상의 Deployment는 스케일 다운
-                    sh "ssh ${KUBE_HOST} 'kubectl scale deployment frontend-deployment-${env.OTHER_COLOR} --replicas=0 -n ${NAMESPACE}'"
+                    // 반대 색상 Deployment 스케일 다운 (존재하지 않을 경우 오류 무시)
+                    sh "ssh ${KUBE_HOST} 'kubectl scale deployment frontend-deployment-${env.OTHER_COLOR} --replicas=0' || true"
                 }
             }
         }

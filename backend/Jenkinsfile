@@ -42,7 +42,7 @@ pipeline {
                 script {
                     echo "Pushing Docker Image ${IMAGE_NAME}:${IMAGE_TAG} to Registry"
                     withDockerRegistry([credentialsId: 'DOCKER_HUB']) {
-                        docker.image("${IMAGE_NAME}:1.0.${IMAGE_TAG}").push()
+                        docker.image("${IMAGE_NAME}:${IMAGE_TAG}").push()
                     }
                 }
             }
