@@ -114,9 +114,9 @@ pipeline {
             }
         }
         stage('Deploy Blue-Green') {
-            when {
-                expression { env.GIT_BRANCH == 'origin/kms/main' }
-            }
+//             when {
+//                 expression { env.GIT_BRANCH == 'origin/kms/main' }
+//             }
             steps {
                 script {
                     // 로컬의 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환 (배포 파일은 backend-deployment-blue.yml, backend-deployment-green.yml 중 선택)
