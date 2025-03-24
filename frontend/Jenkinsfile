@@ -5,7 +5,7 @@ pipeline {
         IMAGE_NAME = 'mstar228/edulink-frontend'
         IMAGE_TAG = "1.0.${BUILD_NUMBER}"
         KUBE_HOST = 'test@192.0.2.7'
-        NAMESPACE = 'kms'
+        NAMESPACE = 'goodleaf'
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
@@ -64,9 +64,9 @@ pipeline {
             }
         }
         stage('Deploy Blue-Green') {
-            when {
-                expression { env.GIT_BRANCH == 'origin/kms/frontend/main' }
-            }
+//             when {
+//                 expression { env.GIT_BRANCH == 'origin/kms/frontend/main' }
+//             }
             steps {
                 script {
                     // 로컬의 배포 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
