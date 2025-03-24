@@ -5,7 +5,7 @@ pipeline {
         IMAGE_NAME = 'mstar228/edulink-frontend'
         IMAGE_TAG = "1.0.${BUILD_NUMBER}"
         KUBE_HOST = 'test@192.0.2.7'
-        NAMESPACE = 'goodleaf'
+        NAMESPACE = 'kms'
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
