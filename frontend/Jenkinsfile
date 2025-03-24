@@ -68,7 +68,6 @@ pipeline {
 //             }//
             steps {
                 script {
-                    // 로컬의 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
                     sh """
                         sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml
                     """
