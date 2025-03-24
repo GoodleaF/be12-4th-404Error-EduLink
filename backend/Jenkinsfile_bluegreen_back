@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'docker' }
 
     environment {
         // 도커 이미지 이름 및 태그 (예: 1.0.<BUILD_NUMBER>)
