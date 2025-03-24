@@ -49,7 +49,7 @@ pipeline {
                 script {
                     // 원격 클러스터에서 프론트엔드 서비스의 selector 'deployment' 값을 조회합니다.
                     def currentColor = sh(
-                        script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"'",
+                        script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
                         returnStdout: true
                     ).trim()
                     echo "Current deployment color: ${currentColor}"
