@@ -48,6 +48,9 @@ pipeline {
             }
             steps {
                 script {
+                    def deployColor = (env.BUILD_NUMBER.toInteger() % 2 == 0) ? 'green' : 'blue'
+                    def otherColor = (deployColor == 'green') ? 'blue' : 'green'
+
                     sshPublisher(
                         publishers: [
                             sshPublisherDesc(
@@ -69,10 +72,10 @@ pipeline {
                                         '''
                                     ),
                                     sshTransfer(
-                                        sourceFiles: 'backend/k8s/backend-deployment.yml',
+                                        sourceFiles: "backend/k8s/backend-deployment-${deployColor}.yml",
                                         remoteDirectory: '/',
                                         execCommand: '''
-                                            sed -i "s/latest/$BUILD_ID/g" backend/k8s/backend-deployment.yml
+                                            sed -i "s/latest/1.0.$BUILD_ID/g" backend/k8s/backend-deployment-${deployColor}.yml
                                         '''
                                     ),
                                     sshTransfer(
@@ -86,9 +89,14 @@ pipeline {
                                         '''
                                     ),
                                     sshTransfer(
-                                        execCommand: '''
-                                            kubectl apply -f /home/test/backend/k8s/backend-deployment.yml
-                                        '''
+                                        execCommand: """
+                                            kubectl apply -f /home/test/backend/k8s/backend-deployment-${deployColor}.yml
+                                        """
+                                    ),
+                                    sshTransfer(
+                                        execCommand: """
+                                            kubectl scale deployment backend-deployment-${otherColor} --replicas=0 -n
+                                        """
                                     )
                                 ]
                             )
