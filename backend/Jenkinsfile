@@ -20,6 +20,7 @@ pipeline {
                 sh 'chmod +x ${WORKSPACE}/backend/gradlew'
 
                 echo "Delete build"
+                echo "${WORKSPACE}"
                 sh 'rm -rf ${WORKSPACE}/backend/build'
 
                 echo "Move to backend and Build"
