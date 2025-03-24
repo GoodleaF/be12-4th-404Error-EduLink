@@ -3,7 +3,10 @@ pipeline {
 
     environment {
         IMAGE_NAME = 'mstar228/edulink-frontend'
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_TAG = "1.0.${BUILD_NUMBER}"
+        KUBE_HOST = 'test@192.0.2.7'
+        NAMESPACE = 'kms'
+        PATH = "/usr/local/bin:${env.PATH}"
     }
 
     stages {
@@ -16,81 +19,80 @@ pipeline {
         }
         stage('Gradle Build') {
             steps {
-                echo "Install packages"
-                sh 'cd /var/lib/jenkins/workspace/edulink-frontend/frontend && npm install i'
-
-                echo "Build"
-                sh 'cd /var/lib/jenkins/workspace/edulink-frontend/frontend && npm run build'
+                echo "Building Frontend"
+                sh '''
+                    cd ${WORKSPACE}/frontend
+                    npm install
+                    npm run build
+                '''
             }
         }
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${IMAGE_NAME}:1.0.${IMAGE_TAG}", "/var/lib/jenkins/workspace/edulink-frontend/frontend")
+                    echo "Building Docker Image ${IMAGE_NAME}:${IMAGE_TAG}"
+                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}", "${WORKSPACE}/frontend")
                 }
             }
         }
         stage('Push to Registry') {
             steps {
                 script {
+                    echo "Pushing Docker Image ${IMAGE_NAME}:${IMAGE_TAG} to Registry"
                     withDockerRegistry([credentialsId: 'DOCKER_HUB']) {
-                        docker.image("${IMAGE_NAME}:1.0.${IMAGE_TAG}").push()
+                        docker.image("${IMAGE_NAME}:${IMAGE_TAG}").push()
                     }
                 }
             }
         }
-        stage('SSH') {
+        stage('Determine Deploy Color') {
+            steps {
+                script {
+                    // 원격 클러스터에서 프론트엔드 서비스의 selector 'deployment' 값을 조회합니다.
+                    def currentColor = sh(
+                        script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -n ${NAMESPACE} -o jsonpath=\"{.spec.selector.deployment}\"'",
+                        returnStdout: true
+                    ).trim()
+                    echo "Current deployment color: ${currentColor}"
+                    // 현재 활성화된 색상이 green이면 새로운 배포는 blue, 반대이면 green으로 결정
+                    def deployColor = (currentColor == 'green') ? 'blue' : 'green'
+                    def otherColor = (deployColor == 'green') ? 'blue' : 'green'
+                    echo "Deploying ${deployColor} version (scaling down ${otherColor})"
+                    env.DEPLOY_COLOR = deployColor
+                    env.OTHER_COLOR = otherColor
+                }
+            }
+        }
+        stage('Deploy Blue-Green') {
             when {
                 expression { env.GIT_BRANCH == 'origin/kms/frontend/main' }
             }
             steps {
                 script {
-                    sshPublisher(
-                        publishers: [
-                            sshPublisherDesc(
-                                configName: 'k8s',
-                                verbose: true,
-                                transfers: [
-                                    sshTransfer(
-                                        sourceFiles: 'frontend/k8s/frontend-conf.yml',
-                                        remoteDirectory: '/',
-                                        execCommand: '''
-                                            sed -i "s/latest/1.0.$BUILD_ID/g" frontend/k8s/frontend-conf.yml
-                                        '''
-                                    ),
-                                    sshTransfer(
-                                        sourceFiles: 'frontend/k8s/frontend-svc.yml',
-                                        remoteDirectory: '/',
-                                        execCommand: '''
-                                            sed -i "s/latest/1.0.$BUILD_ID/g" frontend/k8s/frontend-svc.yml
-                                        '''
-                                    ),
-                                    sshTransfer(
-                                        sourceFiles: 'frontend/k8s/frontend-deployment.yml',
-                                        remoteDirectory: '/',
-                                        execCommand: '''
-                                            sed -i "s/latest/1.0.$BUILD_ID/g" frontend/k8s/frontend-deployment.yml
-                                        '''
-                                    ),
-                                    sshTransfer(
-                                        execCommand: '''
-                                            kubectl apply -f /home/test/frontend/k8s/frontend-conf.yml
-                                        '''
-                                    ),
-                                    sshTransfer(
-                                        execCommand: '''
-                                            kubectl apply -f /home/test/frontend/k8s/frontend-svc.yml
-                                        '''
-                                    ),
-                                    sshTransfer(
-                                        execCommand: '''
-                                            kubectl apply -f /home/test/frontend/k8s/frontend-deployment.yml
-                                        '''
-                                    )
-                                ]
-                            )
-                        ]
-                    )
+                    // 로컬의 배포 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
+                    sh """
+                        sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml
+                    """
+                    // 디버깅: 로컬 k8s 디렉터리의 파일 목록 출력
+                    sh "ls -la ${WORKSPACE}/frontend/k8s"
+
+                    // 수정한 YAML 파일을 원격 호스트로 전송 (scp 명령어 사용)
+                    sh """
+                        scp ${WORKSPACE}/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml ${KUBE_HOST}:/home/test/frontend/k8s/
+                    """
+
+                    // 원격 호스트에서 ConfigMap, Service, 그리고 선택된 Deployment를 적용
+                    sh """
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-conf.yml -n ${NAMESPACE}'
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-svc.yml -n ${NAMESPACE}'
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/frontend/k8s/frontend-deployment-${env.DEPLOY_COLOR}.yml -n ${NAMESPACE}'
+                    """
+
+                    // 선택된 Deployment의 롤아웃 상태 대기
+                    sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/frontend-deployment-${env.DEPLOY_COLOR} -n ${NAMESPACE}'"
+
+                    // 반대 색상의 Deployment는 스케일 다운
+                    sh "ssh ${KUBE_HOST} 'kubectl scale deployment frontend-deployment-${env.OTHER_COLOR} --replicas=0 -n ${NAMESPACE}'"
                 }
             }
         }
