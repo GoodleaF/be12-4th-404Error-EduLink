@@ -103,16 +103,15 @@ pipeline {
                         }
                     }
                     echo "Current deployment color: ${svcSelector}"
-                    // 만약 svcSelector가 'blue'라면, 새 배포 색상은 'green'
-                    def deployColor = (svcSelector == 'green') ? 'blue' : 'green'
-                    def otherColor = (deployColor == 'green') ? 'blue' : 'green'
+                    // svcSelector is the currently running deployment.
+                    // If svcSelector is 'blue', then new deployColor becomes 'green'; if svcSelector is 'green', new deployColor becomes 'blue'
+                    def deployColor = (svcSelector == 'blue') ? 'green' : 'blue'
+                    def otherColor = (deployColor == 'blue') ? 'green' : 'blue'
                     echo "Deploying ${deployColor} version (scaling down ${otherColor})"
-                    // 전역 변수에 저장 (def 키워드를 사용)
+                    // 저장: 전역 변수 사용 (def 키워드로 지역 변수 선언 후 환경 변수에 저장)
                     def currentDeployColor = deployColor
                     def currentOtherColor = otherColor
-                    // 전역 변수 값을 출력
                     echo "Set currentDeployColor=${currentDeployColor}, currentOtherColor=${currentOtherColor}"
-                    // 저장한 값을 환경 변수로 내보내기 위해 setEnv (Jenkins에서 간단히 쓰려면 이렇게 할 수 있음)
                     env.DEPLOY_COLOR = currentDeployColor
                     env.OTHER_COLOR = currentOtherColor
                 }
@@ -127,6 +126,9 @@ pipeline {
                     if (!env.DEPLOY_COLOR) {
                         error "Deployment color not determined!"
                     }
+                    // Optionally, force-delete the new deployment to ensure a clean apply.
+                    sh "ssh ${KUBE_HOST} 'kubectl delete deployment backend-deployment-${env.DEPLOY_COLOR} --ignore-not-found'"
+
                     // 로컬의 YAML 파일 내 'latest' 태그를 IMAGE_TAG로 치환
                     sh """
                         sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml
