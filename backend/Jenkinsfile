@@ -48,9 +48,9 @@ pipeline {
             }
         }
         stage('Determine Deploy Color') {
-            when {
-                expression { env.GIT_BRANCH == 'origin/kms/main' }
-            }
+//             when {
+//                 expression { env.GIT_BRANCH == 'origin/kms/main' }
+//             }
             steps {
                 script {
                     def svcSelector = sh(
