@@ -51,6 +51,14 @@ pipeline {
                 script {
                     def deployColor = (env.BUILD_NUMBER.toInteger() % 2 == 0) ? 'green' : 'blue'
                     def otherColor = (deployColor == 'green') ? 'blue' : 'green'
+                    echo "Deploying ${deployColor} version"
+
+                    sh """
+                        sed -i "s/latest/1.0.${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${deployColor}.yml
+                    """
+
+                    // 디버그: 로컬 k8s 디렉터리 파일 목록 출력
+                    sh "ls -la ${WORKSPACE}/backend/k8s"
 
                     sshPublisher(
                         publishers: [
