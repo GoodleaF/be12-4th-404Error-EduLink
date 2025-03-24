@@ -5,7 +5,6 @@ pipeline {
         IMAGE_NAME = 'mstar228/edulink-backend'
         IMAGE_TAG = "1.0.${BUILD_NUMBER}"
         KUBE_HOST = 'test@192.0.2.7'
-        // 필요 시 Docker CLI가 포함된 경로 추가 (이미 agent로 docker:20.10.16 사용 시 적용)
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
@@ -13,7 +12,7 @@ pipeline {
         stage('Git Clone') {
             steps {
                 echo "Cloning Repository"
-                git url: 'https://github.com/GoodleaF/be12-4th-404Error-EduLink.git',
+                git url: 'https://github.com/beyond-sw-camp/be12-4th-404Error-EduLink.git',
                     branch: "${env.GIT_BRANCH.replace('origin/', '')}"
             }
         }
@@ -49,9 +48,9 @@ pipeline {
             }
         }
         stage('SSH') {
-//             when {
-//                 expression { env.GIT_BRANCH == 'origin/kms/main' }
-//             }
+            when {
+                expression { env.GIT_BRANCH == 'origin/kms/main' }
+            }
             steps {
                 script {
                     // 원격 클러스터의 서비스 'backend-svc'의 selector 값(예: 'green' 또는 'blue')을 조회합니다.
