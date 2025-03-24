@@ -56,7 +56,7 @@ pipeline {
                     ).trim()
                     if (!svcSelector) {
                         echo "Service 'backend-svc' not found. Installing backend config..."
-                        // 서비스, ConfigMap, 그리고 기본 Deployment 파일을 설치합니다.
+                        // 기본 YAML 파일들을 적용하여 서비스를 생성합니다.
                         sshPublisher(
                             publishers: [
                                 sshPublisherDesc(
@@ -105,7 +105,7 @@ pipeline {
                     def deployColor = (svcSelector == 'green') ? 'blue' : 'green'
                     def otherColor = (deployColor == 'green') ? 'blue' : 'green'
                     echo "Deploying ${deployColor} version (scaling down ${otherColor})"
-                    // 전역 변수로 저장 (스크립트 내에서 사용할 전역 변수)
+                    // 전역 변수에 저장
                     currentDeployColor = deployColor
                     currentOtherColor = otherColor
                     echo "Set currentDeployColor=${currentDeployColor}, currentOtherColor=${currentOtherColor}"
@@ -121,11 +121,10 @@ pipeline {
                     if (!currentDeployColor) {
                         error "Deployment color not determined!"
                     }
-                    // 로컬의 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환 (배포 파일은 backend-deployment-blue.yml 또는 backend-deployment-green.yml)
+                    // 로컬의 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
                     sh """
                         sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${currentDeployColor}.yml
                     """
-                    // 디버깅: 로컬 k8s 디렉터리 파일 목록 출력
                     sh "ls -la ${WORKSPACE}/backend/k8s"
                     // 수정한 YAML 파일을 원격 호스트로 전송
                     sh """
@@ -137,9 +136,7 @@ pipeline {
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${currentDeployColor}.yml'
                     """
-                    // 선택된 Deployment의 롤아웃 상태 대기
                     sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${currentDeployColor}'"
-                    // 반대 색상의 Deployment 스케일 다운 (오류 발생 시 무시)
                     sh "ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${currentOtherColor} --replicas=0' || true"
                 }
             }
