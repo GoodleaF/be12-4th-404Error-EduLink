@@ -50,6 +50,7 @@ pipeline {
         stage('Determine Deploy Color') {
             steps {
                 script {
+                    // 기본 네임스페이스에서 svc를 조회
                     def svcSelector = sh(
                         script: "ssh ${KUBE_HOST} 'kubectl get svc backend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
                         returnStdout: true
@@ -74,9 +75,9 @@ pipeline {
                                             execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" backend/k8s/backend-svc.yml"
                                         ),
                                         sshTransfer(
-                                            sourceFiles: 'backend/k8s/backend-deployment.yml',
+                                            sourceFiles: 'backend/k8s/backend-deployment-blue.yml',
                                             remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" backend/k8s/backend-deployment.yml"
+                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" backend/k8s/backend-deployment-blue.yml"
                                         ),
                                         sshTransfer(
                                             execCommand: "kubectl apply -f /home/test/backend/k8s/backend-cm.yml"
@@ -85,7 +86,7 @@ pipeline {
                                             execCommand: "kubectl apply -f /home/test/backend/k8s/backend-svc.yml"
                                         ),
                                         sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/backend/k8s/backend-deployment.yml"
+                                            execCommand: "kubectl apply -f /home/test/backend/k8s/backend-deployment-blue.yml"
                                         )
                                     ]
                                 )
@@ -97,18 +98,23 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         if (!svcSelector) {
-                            echo "Service still not found. Defaulting current deployment color to 'green'."
-                            svcSelector = 'green'
+                            echo "Service still not found. Defaulting current deployment color to 'blue'."
+                            svcSelector = 'blue'
                         }
                     }
                     echo "Current deployment color: ${svcSelector}"
+                    // 만약 svcSelector가 'blue'라면, 새 배포 색상은 'green'
                     def deployColor = (svcSelector == 'green') ? 'blue' : 'green'
                     def otherColor = (deployColor == 'green') ? 'blue' : 'green'
                     echo "Deploying ${deployColor} version (scaling down ${otherColor})"
-                    // 전역 변수에 저장
-                    currentDeployColor = deployColor
-                    currentOtherColor = otherColor
+                    // 전역 변수에 저장 (def 키워드를 사용)
+                    def currentDeployColor = deployColor
+                    def currentOtherColor = otherColor
+                    // 전역 변수 값을 출력
                     echo "Set currentDeployColor=${currentDeployColor}, currentOtherColor=${currentOtherColor}"
+                    // 저장한 값을 환경 변수로 내보내기 위해 setEnv (Jenkins에서 간단히 쓰려면 이렇게 할 수 있음)
+                    env.DEPLOY_COLOR = currentDeployColor
+                    env.OTHER_COLOR = currentOtherColor
                 }
             }
         }
@@ -118,26 +124,26 @@ pipeline {
 //             }
             steps {
                 script {
-                    if (!currentDeployColor) {
+                    if (!env.DEPLOY_COLOR) {
                         error "Deployment color not determined!"
                     }
-                    // 로컬의 YAML 파일 내 'latest' 태그를 현재 IMAGE_TAG로 치환
+                    // 로컬의 YAML 파일 내 'latest' 태그를 IMAGE_TAG로 치환
                     sh """
-                        sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${currentDeployColor}.yml
+                        sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml
                     """
                     sh "ls -la ${WORKSPACE}/backend/k8s"
                     // 수정한 YAML 파일을 원격 호스트로 전송
                     sh """
-                        scp ${WORKSPACE}/backend/k8s/backend-deployment-${currentDeployColor}.yml ${KUBE_HOST}:/home/test/backend/k8s/
+                        scp ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml ${KUBE_HOST}:/home/test/backend/k8s/
                     """
                     // 원격 호스트에서 ConfigMap, Service, 그리고 선택된 Deployment 적용
                     sh """
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-cm.yml'
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
-                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${currentDeployColor}.yml'
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml'
                     """
-                    sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${currentDeployColor}'"
-                    sh "ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${currentOtherColor} --replicas=0' || true"
+                    sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${env.DEPLOY_COLOR}'"
+                    sh "ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${env.OTHER_COLOR} --replicas=0' || true"
                 }
             }
         }
