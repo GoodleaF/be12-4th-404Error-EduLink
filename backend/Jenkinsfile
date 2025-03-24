@@ -44,9 +44,9 @@ pipeline {
             }
         }
         stage('SSH') {
-            when {
-                expression { env.GIT_BRANCH == 'origin/kms/main' }
-            }
+//             when {
+//                 expression { env.GIT_BRANCH == 'origin/kms/main' }
+//             }
             steps {
                 script {
                     def deployColor = (env.BUILD_NUMBER.toInteger() % 2 == 0) ? 'green' : 'blue'
