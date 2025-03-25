@@ -1,10 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: kms
   name: frontend-conf
 data:
-  default.cnf: |
+  default.conf: |
     server {
         listen       80;
         listen  [::]:80;
