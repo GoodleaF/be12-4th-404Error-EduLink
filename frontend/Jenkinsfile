@@ -131,10 +131,12 @@ pipeline {
             steps {
                 script {
                     echo "Updating service selector to deployment: ${env.DEPLOY_COLOR}"
-                    // patch 명령어를 통해 서비스(frontend-svc)의 selector를 업데이트
-                    def patchCmd = "kubectl patch svc frontend-svc -p '{\"spec\":{\"selector\":{\"deployment\":\"${env.DEPLOY_COLOR}\",\"type\":\"frontend\"}}}'"
+                    def patchJson = '{"spec":{"selector":{"deployment":"' + env.DEPLOY_COLOR + '","type":"frontend"}}}'
+                    def patchCmd = "kubectl patch svc frontend-svc -p '" + patchJson + "'"
                     echo "Patch command: ${patchCmd}"
-                    sh "ssh ${KUBE_HOST} \"${patchCmd}\""
+                    sh """
+                        ssh ${KUBE_HOST} "${patchCmd}"
+                    """
                 }
             }
         }
