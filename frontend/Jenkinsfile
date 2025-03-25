@@ -134,7 +134,7 @@ pipeline {
                     sh """
                         echo '{"spec":{"selector":{"deployment":"${env.DEPLOY_COLOR}","type":"frontend"}}}' > /tmp/patch.json
                         scp /tmp/patch.json ${KUBE_HOST}:/tmp/patch.json
-                        ssh ${KUBE_HOST} 'kubectl patch svc frontend-svc -p "$(cat /tmp/patch.json)"'
+                        ssh ${KUBE_HOST} "kubectl patch svc frontend-svc -p '\$(cat /tmp/patch.json)'"
                         ssh ${KUBE_HOST} 'rm /tmp/patch.json'
                         rm /tmp/patch.json
                     """
