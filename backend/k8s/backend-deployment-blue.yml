@@ -46,6 +46,11 @@ spec:
                 configMapKeyRef:
                   name: backend-cm
                   key: DB_PASSWORD
+            - name: SECRET_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-cm
+                  key: SECRET_KEY
           ports:
             - containerPort: 8080
       terminationGracePeriodSeconds: 0
