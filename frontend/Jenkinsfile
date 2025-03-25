@@ -126,6 +126,18 @@ pipeline {
                 }
             }
         }
+        // 새로 배포된 색상에 맞춰 서비스 셀렉터를 업데이트하는 단계 추가
+        stage('Update Service Selector') {
+            steps {
+                script {
+                    echo "Updating service selector to deployment: ${env.DEPLOY_COLOR}"
+                    // patch 명령어를 통해 서비스(frontend-svc)의 selector를 업데이트
+                    def patchCmd = "kubectl patch svc frontend-svc -p '{\"spec\":{\"selector\":{\"deployment\":\"${env.DEPLOY_COLOR}\",\"type\":\"frontend\"}}}'"
+                    echo "Patch command: ${patchCmd}"
+                    sh "ssh ${KUBE_HOST} \"${patchCmd}\""
+                }
+            }
+        }
         // 추가 검증 단계: 배포 후 헬스체크 또는 smoke test
         stage('Verify Deployment') {
             steps {
