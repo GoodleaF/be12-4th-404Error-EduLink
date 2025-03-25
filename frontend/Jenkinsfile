@@ -131,13 +131,10 @@ pipeline {
             steps {
                 script {
                     echo "Updating service selector to deployment: ${env.DEPLOY_COLOR}"
-                    def patchJson = '{"spec":{"selector":{"deployment":"' + env.DEPLOY_COLOR + '","type":"frontend"}}}'
-
-                    // JSON 파일에 쓰기 및 kubectl patch 명령 수정
                     sh """
-                        echo '${patchJson}' > ${WORKSPACE}/patch.json
+                        echo '{"spec":{"selector":{"deployment":"${env.DEPLOY_COLOR}","type":"frontend"}}}' > ${WORKSPACE}/patch.json
                         scp ${WORKSPACE}/patch.json ${KUBE_HOST}:/tmp/patch.json
-                        ssh ${KUBE_HOST} 'kubectl patch svc frontend-svc -p "$(cat /tmp/patch.json)"'
+                        ssh ${KUBE_HOST} "kubectl patch svc frontend-svc -p \$(cat /tmp/patch.json)"
                         ssh ${KUBE_HOST} 'rm /tmp/patch.json'
                         rm ${WORKSPACE}/patch.json
                     """
@@ -148,8 +145,6 @@ pipeline {
             steps {
                 script {
                     echo "Verifying deployment health..."
-                    // 예시: 헬스체크 엔드포인트 호출
-                    // sh "curl -f http://your-frontend-url/health"
                 }
             }
         }
