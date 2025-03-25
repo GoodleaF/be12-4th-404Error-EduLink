@@ -164,7 +164,7 @@ pipeline {
 
                     echo "Deploying ${deployColor} version"
 
-                    // 1. 업데이트할 배포 파일의 이미지 태그 변경 및 전송
+                    // 1. 배포 파일의 이미지 태그 업데이트 후 전송
                     sh """
                         sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${deployColor}.yml
                     """
@@ -172,27 +172,34 @@ pipeline {
                         scp ${WORKSPACE}/backend/k8s/backend-deployment-${deployColor}.yml ${KUBE_HOST}:/home/test/backend/k8s/
                     """
 
-                    // 2. 새 배포(deployColor)를 적용하고 스케일 업 (기존 파드 유지)
+                    // 2. 새 배포 적용 및 스케일 업
                     sh """
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${deployColor}.yml'
                         ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${deployColor} --replicas=2'
                     """
 
-                    // 3. 새 배포의 롤아웃 상태를 체크하여 완전 준비될 때까지 대기
+                    // 3. 새 배포 롤아웃 상태 체크
                     sh """
                         ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${deployColor} --timeout=5m'
                     """
 
-                    // 4. 새 배포가 완전히 준비되면 서비스의 selector를 업데이트하여 트래픽을 새 배포로 전환
+                    // 4. 서비스 YAML 파일 내 selector 업데이트
+                    // 기존 "app: backend-..." 패턴 전체를 새로운 배포 색상으로 교체
                     sh """
-                        sed -i "s/app: backend-[^\\"]*/app: backend-${deployColor}/g" ${WORKSPACE}/backend/k8s/backend-svc.yml
+                        sed -i "s/app: backend-.*\$/app: backend-${deployColor}/" ${WORKSPACE}/backend/k8s/backend-svc.yml
                     """
                     sh """
                         scp ${WORKSPACE}/backend/k8s/backend-svc.yml ${KUBE_HOST}:/home/test/backend/k8s/
+                    """
+                    sh """
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
+                    """
+
+                    // 5. 기존 배포(다른 색상)의 스케일 다운
+                    sh """
                         ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${otherColor} --replicas=0'
                     """
-                }
+                    }
             }
             post {
                 success {
