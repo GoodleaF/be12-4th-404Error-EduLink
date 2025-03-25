@@ -47,23 +47,49 @@ pipeline {
         stage('Determine Deploy Color') {
             steps {
                 script {
-                    // 현재 활성화된 디플로이먼트를 조회 (레플리카 수 > 0인 디플로이먼트)
-                    def currentDeployment = sh(
-                        script: "ssh ${KUBE_HOST} 'kubectl get deployment -l app=frontend -o jsonpath=\"{.items[?(@.spec.replicas>0)].metadata.name}\"' || echo ''",
+                    // 각각의 배포의 레플리카 수를 조회
+                    def blueReplicas = sh(
+                        script: "ssh ${KUBE_HOST} 'kubectl get deployment frontend-deployment-blue -o jsonpath=\"{.spec.replicas}\"' || echo '0'",
                         returnStdout: true
                     ).trim()
-                    echo "Current active deployment: ${currentDeployment}"
+                    def greenReplicas = sh(
+                        script: "ssh ${KUBE_HOST} 'kubectl get deployment frontend-deployment-green -o jsonpath=\"{.spec.replicas}\"' || echo '0'",
+                        returnStdout: true
+                    ).trim()
+
+                    int blueCount = 0
+                    int greenCount = 0
+                    try {
+                        blueCount = blueReplicas.toInteger()
+                    } catch (Exception e) {
+                        blueCount = 0
+                    }
+                    try {
+                        greenCount = greenReplicas.toInteger()
+                    } catch (Exception e) {
+                        greenCount = 0
+                    }
+
+                    echo "Blue deployment replicas: ${blueCount}"
+                    echo "Green deployment replicas: ${greenCount}"
 
                     def deployColor = ''
                     def otherColor = ''
-                    if (currentDeployment.contains("blue")) {
+
+                    if (blueCount > 0 && greenCount == 0) {
+                        // 현재 blue가 활성화되어 있으면 green 배포
                         deployColor = "green"
                         otherColor = "blue"
-                    } else if (currentDeployment.contains("green")) {
+                    } else if (greenCount > 0 && blueCount == 0) {
+                        // 현재 green이 활성화되어 있으면 blue 배포
                         deployColor = "blue"
                         otherColor = "green"
+                    } else if (blueCount > 0 && greenCount > 0) {
+                        // 두 배포 모두 활성화되어 있다면, 간단하게 blue의 반대인 green을 선택 (필요시 로직 조정)
+                        deployColor = "green"
+                        otherColor = "blue"
                     } else {
-                        echo "No active deployment found. Defaulting to blue as new deployment."
+                        // 활성 배포가 없을 경우 기본값: blue 배포
                         deployColor = "blue"
                         otherColor = "green"
                     }
@@ -105,7 +131,7 @@ pipeline {
             steps {
                 script {
                     echo "Verifying deployment health..."
-                    // 예시: 아래와 같이 헬스체크 엔드포인트 호출
+                    // 예시: 헬스체크 엔드포인트 호출
                     // sh "curl -f http://your-frontend-url/health"
                 }
             }
