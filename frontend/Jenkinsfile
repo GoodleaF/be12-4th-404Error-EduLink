@@ -47,58 +47,36 @@ pipeline {
         stage('Determine Deploy Color') {
             steps {
                 script {
-                    // 먼저 서비스(frontend-svc)가 존재하는지 확인. 없으면 먼저 설치합니다.
+                    // 현재 서비스의 deployment 레이블 확인
                     def svcSelector = sh(
                         script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
                         returnStdout: true
                     ).trim()
                     if (!svcSelector) {
-                        echo "Service 'frontend-svc' not found. Installing configmap, service and default deployment."
-                        sshPublisher(
-                            publishers: [
-                                sshPublisherDesc(
-                                    configName: 'k8s',
-                                    verbose: true,
-                                    transfers: [
-                                        sshTransfer(
-                                            sourceFiles: 'frontend/k8s/frontend-conf.yml',
-                                            remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" frontend/k8s/frontend-conf.yml"
-                                        ),
-                                        sshTransfer(
-                                            sourceFiles: 'frontend/k8s/frontend-svc.yml',
-                                            remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" frontend/k8s/frontend-svc.yml"
-                                        ),
-                                        sshTransfer(
-                                            sourceFiles: 'frontend/k8s/frontend-deployment.yml',
-                                            remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" frontend/k8s/frontend-deployment.yml"
-                                        ),
-                                        sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/frontend/k8s/frontend-conf.yml"
-                                        ),
-                                        sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/frontend/k8s/frontend-svc.yml"
-                                        ),
-                                        sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/frontend/k8s/frontend-deployment.yml"
-                                        )
-                                    ]
-                                )
-                            ]
-                        )
-                        // 잠시 대기 후 다시 조회
-                        sleep time: 10, unit: 'SECONDS'
-                        svcSelector = sh(
-                            script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
+                        echo "Service 'frontend-svc' not found or no deployment selector. Checking existing deployments."
+
+                        // 현재 존재하는 deployment 확인
+                        def blueDeployment = sh(
+                            script: "ssh ${KUBE_HOST} 'kubectl get deployment frontend-deployment-blue -o name 2>/dev/null || echo ''",
                             returnStdout: true
                         ).trim()
-                        if (!svcSelector) {
-                            echo "Service still not found. Defaulting current deployment color to 'green'."
+
+                        def greenDeployment = sh(
+                            script: "ssh ${KUBE_HOST} 'kubectl get deployment frontend-deployment-green -o name 2>/dev/null || echo ''",
+                            returnStdout: true
+                        ).trim()
+
+                        // 기존 deployment 상태에 따라 배포 색상 결정
+                        if (!blueDeployment && greenDeployment) {
+                            svcSelector = 'green'
+                        } else if (blueDeployment && !greenDeployment) {
+                            svcSelector = 'blue'
+                        } else {
+                            // 둘 다 없거나 둘 다 있는 경우 green으로 시작
                             svcSelector = 'green'
                         }
                     }
+
                     echo "Current deployment color: ${svcSelector}"
                     // 현재 서비스가 green이면 배포할 색상은 blue, 그렇지 않으면 green으로 결정
                     def deployColor = (svcSelector == 'green') ? 'blue' : 'green'
