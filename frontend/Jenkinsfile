@@ -131,12 +131,13 @@ pipeline {
             steps {
                 script {
                     echo "Updating service selector to deployment: ${env.DEPLOY_COLOR}"
-                    def patchJson = '{"spec":{"selector":{"deployment":"' + env.DEPLOY_COLOR + '","type":"frontend"}}}'
-                    def patchCmd = "kubectl patch svc frontend-svc -p '" + patchJson + "'"
+                    // JSON 형식의 patch 문자열을 생성 (내부의 이중 따옴표는 백슬래시로 이스케이프)
+                    def patchJson = "{\\\"spec\\\":{\\\"selector\\\":{\\\"deployment\\\":\\\"${env.DEPLOY_COLOR}\\\",\\\"type\\\":\\\"frontend\\\"}}}"
+                    // patch 명령어를 구성 (외부는 이중 따옴표로 감싸서 전달)
+                    def patchCmd = "kubectl patch svc frontend-svc -p \"${patchJson}\""
                     echo "Patch command: ${patchCmd}"
-                    sh """
-                        ssh ${KUBE_HOST} "${patchCmd}"
-                    """
+                    // ssh를 통해 원격에서 patch 명령어 실행
+                    sh "ssh ${KUBE_HOST} \"${patchCmd}\""
                 }
             }
         }
