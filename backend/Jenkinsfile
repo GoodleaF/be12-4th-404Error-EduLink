@@ -50,14 +50,13 @@ pipeline {
         stage('Determine Deploy Color') {
             steps {
                 script {
-                    // 기본 네임스페이스에서 svc를 조회
+                    // 기존 svc의 배포 색상을 조회하여 현재 색상을 결정합니다.
                     def svcSelector = sh(
                         script: "ssh ${KUBE_HOST} 'kubectl get svc backend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
                         returnStdout: true
                     ).trim()
                     if (!svcSelector) {
                         echo "Service 'backend-svc' not found. Installing backend config..."
-                        // 기본 YAML 파일들을 적용하여 서비스를 생성합니다.
                         sshPublisher(
                             publishers: [
                                 sshPublisherDesc(
@@ -103,17 +102,12 @@ pipeline {
                         }
                     }
                     echo "Current deployment color: ${svcSelector}"
-                    // svcSelector is the currently running deployment.
-                    // If svcSelector is 'blue', then new deployColor becomes 'green'; if svcSelector is 'green', new deployColor becomes 'blue'
+                    // svcSelector가 blue이면 새로운 배포 색상은 green, 반대의 경우는 blue
                     def deployColor = (svcSelector == 'blue') ? 'green' : 'blue'
                     def otherColor = (deployColor == 'blue') ? 'green' : 'blue'
                     echo "Deploying ${deployColor} version (scaling down ${otherColor})"
-                    // 저장: 전역 변수 사용 (def 키워드로 지역 변수 선언 후 환경 변수에 저장)
-                    def currentDeployColor = deployColor
-                    def currentOtherColor = otherColor
-                    echo "Set currentDeployColor=${currentDeployColor}, currentOtherColor=${currentOtherColor}"
-                    env.DEPLOY_COLOR = currentDeployColor
-                    env.OTHER_COLOR = currentOtherColor
+                    env.DEPLOY_COLOR = deployColor
+                    env.OTHER_COLOR = otherColor
                 }
             }
         }
@@ -132,6 +126,12 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
+                    // 서비스 파일의 selector 값을 동적으로 변경: 기존 'blue'를 현재 DEPLOY_COLOR로 변경
+                    sh """
+                        sed -i "s/deployment: blue/deployment: ${DEPLOY_COLOR}/g" ${WORKSPACE}/backend/k8s/backend-svc.yml
+                    """
+
+                    // 변경된 서비스 파일을 적용
                     sh """
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-cm.yml'
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
@@ -147,13 +147,10 @@ pipeline {
 
                     sh """
                         if [ "${otherDeploymentExists}" = "" ]; then
-                            # 다른 배포가 없으면 새 배포를 2개 replicas로 생성
                             ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml'
                             ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${env.DEPLOY_COLOR} --replicas=2'
                         else
-                             # 다른 배포가 있으면 스케일 다운
                             ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${env.OTHER_COLOR} --replicas=0'
-
                             ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml'
                             ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${env.DEPLOY_COLOR} --replicas=2'
                         fi
