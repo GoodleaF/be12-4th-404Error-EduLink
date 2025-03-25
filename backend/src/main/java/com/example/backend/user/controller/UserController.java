@@ -68,6 +68,6 @@ public class UserController {
     @GetMapping("/gettest")
     public String getTest() {
 
-        return "test";
+        return "test2";
     }
 }
