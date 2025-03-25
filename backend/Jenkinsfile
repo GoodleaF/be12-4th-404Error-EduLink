@@ -126,26 +126,27 @@ pipeline {
                     if (!env.DEPLOY_COLOR) {
                         error "Deployment color not determined!"
                     }
-                    // Optionally, force-delete the new deployment to ensure a clean apply.
-                    sh "ssh ${KUBE_HOST} 'kubectl delete deployment backend-deployment-${env.DEPLOY_COLOR} --ignore-not-found'"
 
-                    // 로컬의 YAML 파일 내 'latest' 태그를 IMAGE_TAG로 치환
-                    sh """
-                        sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml
-                    """
-                    sh "ls -la ${WORKSPACE}/backend/k8s"
-                    // 수정한 YAML 파일을 원격 호스트로 전송
-                    sh """
-                        scp ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml ${KUBE_HOST}:/home/test/backend/k8s/
-                    """
-                    // 원격 호스트에서 ConfigMap, Service, 그리고 선택된 Deployment 적용
+
                     sh """
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-cm.yml'
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
-                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml'
                     """
-                    sh "ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${env.DEPLOY_COLOR}'"
-                    sh "ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${env.OTHER_COLOR} --replicas=0' || true"
+
+                    sh """
+                        sed -i "s/latest/${IMAGE_TAG}/g" ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml
+                    """
+
+                    sh """
+                        scp ${WORKSPACE}/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml ${KUBE_HOST}:/home/test/backend/k8s/
+                    """
+
+                    sh """
+                        ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-deployment-${env.DEPLOY_COLOR}.yml || true'
+                        ssh ${KUBE_HOST} 'kubectl rollout status deployment/backend-deployment-${env.DEPLOY_COLOR} --timeout=5m || kubectl get pods'
+
+                        ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${env.OTHER_COLOR} --replicas=0 || true'
+                    """
                 }
             }
         }
