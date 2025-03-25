@@ -47,63 +47,27 @@ pipeline {
         stage('Determine Deploy Color') {
             steps {
                 script {
-                    // 현재 서비스(frontend-svc)가 가리키는 배포 색상을 조회
-                    def svcSelector = sh(
-                        script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
+                    // 현재 활성화된 디플로이먼트를 조회 (레플리카 수 > 0인 디플로이먼트)
+                    def currentDeployment = sh(
+                        script: "ssh ${KUBE_HOST} 'kubectl get deployment -l app=frontend -o jsonpath=\"{.items[?(@.spec.replicas>0)].metadata.name}\"' || echo ''",
                         returnStdout: true
                     ).trim()
-                    if (!svcSelector) {
-                        echo "Service 'frontend-svc' not found. Installing configmap, service and default deployment."
-                        // 초기 설치: configmap, service, 기본 deployment를 설치
-                        sshPublisher(
-                            publishers: [
-                                sshPublisherDesc(
-                                    configName: 'k8s',
-                                    verbose: true,
-                                    transfers: [
-                                        sshTransfer(
-                                            sourceFiles: 'frontend/k8s/frontend-conf.yml',
-                                            remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" frontend/k8s/frontend-conf.yml"
-                                        ),
-                                        sshTransfer(
-                                            sourceFiles: 'frontend/k8s/frontend-svc.yml',
-                                            remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" frontend/k8s/frontend-svc.yml"
-                                        ),
-                                        sshTransfer(
-                                            sourceFiles: 'frontend/k8s/frontend-deployment.yml',
-                                            remoteDirectory: '/',
-                                            execCommand: "sed -i \"s/latest/${IMAGE_TAG}/g\" frontend/k8s/frontend-deployment.yml"
-                                        ),
-                                        sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/frontend/k8s/frontend-conf.yml"
-                                        ),
-                                        sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/frontend/k8s/frontend-svc.yml"
-                                        ),
-                                        sshTransfer(
-                                            execCommand: "kubectl apply -f /home/test/frontend/k8s/frontend-deployment.yml"
-                                        )
-                                    ]
-                                )
-                            ]
-                        )
-                        // 초기 설치 후 잠시 대기
-                        sleep time: 10, unit: 'SECONDS'
-                        svcSelector = sh(
-                            script: "ssh ${KUBE_HOST} 'kubectl get svc frontend-svc -o jsonpath=\"{.spec.selector.deployment}\"' || echo ''",
-                            returnStdout: true
-                        ).trim()
-                        if (!svcSelector) {
-                            echo "Service still not found. Defaulting current deployment color to 'green'."
-                            svcSelector = 'green'
-                        }
+                    echo "Current active deployment: ${currentDeployment}"
+
+                    def deployColor = ''
+                    def otherColor = ''
+                    if (currentDeployment.contains("blue")) {
+                        deployColor = "green"
+                        otherColor = "blue"
+                    } else if (currentDeployment.contains("green")) {
+                        deployColor = "blue"
+                        otherColor = "green"
+                    } else {
+                        echo "No active deployment found. Defaulting to blue as new deployment."
+                        deployColor = "blue"
+                        otherColor = "green"
                     }
-                    echo "Current deployment color: ${svcSelector}"
-                    // 현재 색상이 green이면 blue로, 그 외엔 green으로 배포 결정
-                    def deployColor = (svcSelector == 'green') ? 'blue' : 'green'
-                    def otherColor = (deployColor == 'green') ? 'blue' : 'green'
+
                     echo "Deploying ${deployColor} version (scaling down ${otherColor})"
                     env.DEPLOY_COLOR = deployColor
                     env.OTHER_COLOR = otherColor
@@ -136,12 +100,12 @@ pipeline {
                 }
             }
         }
-        // 추가적인 검증 단계: 배포 후 헬스체크 또는 smoke test를 실행해 무중단 배포가 정상적으로 완료되었는지 확인
+        // 추가 검증 단계: 배포 후 헬스체크 또는 smoke test
         stage('Verify Deployment') {
             steps {
                 script {
                     echo "Verifying deployment health..."
-                    // 예시: 아래와 같이 헬스체크 엔드포인트를 호출할 수 있습니다.
+                    // 예시: 아래와 같이 헬스체크 엔드포인트 호출
                     // sh "curl -f http://your-frontend-url/health"
                 }
             }
