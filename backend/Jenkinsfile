@@ -1,22 +1,3 @@
-// 전역 변수 선언
-def deployColor = ""
-def otherColor = ""
-def startTime = 0
-
-def sendDiscordMessage(String title, String description, String color) {
-    withCredentials([string(credentialsId: 'Discord-Webhook', variable: 'DISCORD')]) {
-        discordSend(
-            description: description,
-            footer: "Jenkins CI/CD",
-            link: env.BUILD_URL,
-            result: currentBuild.currentResult,
-            title: title,
-            color: color,
-            webhookURL: "$DISCORD"
-        )
-    }
-}
-
 pipeline {
     agent any
 
@@ -29,6 +10,8 @@ pipeline {
         IMAGE_TAG = "1.0.${BUILD_NUMBER}"
         KUBE_HOST = 'test@192.0.2.7'
         PATH = "/usr/local/bin:${env.PATH}"
+        DEPLOY_COLOR = 'green'    // 기본값 설정
+        OTHER_COLOR = 'blue'
     }
 
     stages {
@@ -140,16 +123,15 @@ pipeline {
 
                         // 현재 배포 상태에 따라 배포 색상 결정
                         if (blueReady == '0' && greenReady != '0') {
-                            deployColor = 'blue'
-                            otherColor = 'green'
+                            chosenColor = 'blue'
+                            alternateColor = 'green'
                         } else if (blueReady != '0' && greenReady == '0') {
-                            deployColor = 'green'
-                            otherColor = 'blue'
+                            chosenColor = 'green'
+                            alternateColor = 'blue'
                         }
 
-                        // 환경 변수에 명시적으로 설정
-                        env.DEPLOY_COLOR = deployColor
-                        env.OTHER_COLOR = otherColor
+                        env.DEPLOY_COLOR = chosenColor
+                        env.OTHER_COLOR = alternateColor
 
                         echo "Deploying ${env.DEPLOY_COLOR} version (scaling down ${env.OTHER_COLOR} later)"
                     } catch (Exception e) {
@@ -207,7 +189,6 @@ pipeline {
                     """
                     sh """
                         scp ${WORKSPACE}/backend/k8s/backend-svc.yml ${KUBE_HOST}:/home/test/backend/k8s/
-
                         ssh ${KUBE_HOST} 'kubectl apply -f /home/test/backend/k8s/backend-svc.yml'
                         ssh ${KUBE_HOST} 'kubectl scale deployment backend-deployment-${otherColor} --replicas=0'
                     """
@@ -249,5 +230,20 @@ pipeline {
                 sendDiscordMessage("🚨 전체 파이프라인 실패!", "⏱️ 실행 시간: ${duration}초", "RED")
             }
         }
+    }
+}
+
+// 전역 함수 선언 (pipeline 외부)
+def sendDiscordMessage(String title, String description, String color) {
+    withCredentials([string(credentialsId: 'Discord-Webhook', variable: 'DISCORD')]) {
+        discordSend(
+            description: description,
+            footer: "Jenkins CI/CD",
+            link: env.BUILD_URL,
+            result: currentBuild.currentResult,
+            title: title,
+            color: color,
+            webhookURL: "$DISCORD"
+        )
     }
 }
